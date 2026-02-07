@@ -1,136 +1,130 @@
-# TaskMate API - A REST API in Go
+# TaskMate - Simple Task Management API
 
-TaskMate is a task management application built in Go that demonstrates HTTP servers, JSON persistence, authentication, and concurrent data access. Tasks are stored in a JSON file with support for due dates, priorities, and status tracking.
+TaskMate is a lightweight task management application with a REST API and web interface. Manage your tasks with due dates, priorities, and status tracking - all stored in a simple JSON file.
 
 ![TaskMate UI](img/homepage.png)
 
-## What You'll Learn
+## Quick Start
 
-- Building REST APIs in Go
-- HTTP routing with Gorilla Mux
-- JSON serialization/deserialization and file persistence
-- Basic authentication with API keys
-- Thread-safe data structures
-- Go structs and methods
-- File I/O operations
+### Prerequisites
 
-## Architecture Overview
+- Go 1.21 or higher
+- Git (optional)
 
-### Core Components
+### Installation & Running
 
-1. **Task Struct**: Represents a task with due date, priority, and status
-2. **TaskStore**: Thread-safe storage with JSON file persistence
-3. **Server**: HTTP server with authentication middleware
-4. **Router**: URL routing and endpoint handling
+1. **Clone or download the repository:**
+   ```bash
+   git clone <repository-url>
+   cd taskmate
+   ```
 
-## Code Walkthrough
+2. **Install dependencies:**
+   ```bash
+   go mod tidy
+   ```
 
-### 1. Data Models
+3. **Create configuration file:**
+   ```bash
+   cp config.json.example config.json
+   ```
+   
+   The default password is `randomforest`. You can change it later (see [Security](#changing-the-master-password) section).
 
-```go
-type Task struct {
-    ID          int       `json:"id"`
-    Title       string    `json:"title"`
-    Description string    `json:"description"`
-    DueDate     string    `json:"due_date"`
-    Priority    string    `json:"priority"`    // low, medium, high
-    Status      string    `json:"status"`      // pending, completed
-    CreatedAt   time.Time `json:"created_at"`
-    UpdatedAt   time.Time `json:"updated_at"`
+4. **Start the server:**
+   ```bash
+   go run main.go
+   ```
+
+5. **Open your browser:**
+   
+   Visit **http://localhost:8080** to access the web interface.
+
+That's it! You're ready to start managing tasks.
+
+## Using TaskMate
+
+### Web Interface
+
+The web UI provides an intuitive interface to:
+- ➕ Create tasks with title, description, due date, and priority
+- 📋 View all tasks or filter by status (pending/completed)
+- ✓ Mark tasks as complete or reopen them
+- ✏️ Edit task details
+- 🗑️ Delete tasks
+
+### API Usage
+
+TaskMate provides a REST API for programmatic access.
+
+#### Step 1: Generate an API Token
+
+To create, update, or delete tasks via API, you need a token. Generate one using the master password:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/auth/token \
+  -H "Content-Type: application/json" \
+  -d '{"password": "randomforest"}'
+```
+
+Response:
+```json
+{
+  "token": "a1b2c3d4e5f6...",
+  "message": "Token generated successfully. Save this token securely, it won't be shown again."
 }
 ```
 
-**What's happening here?**
-- We define a `Task` struct with JSON tags for API responses
-- JSON tags tell Go how to convert between Go structs and JSON
-- `json:"id"` means the `ID` field becomes `"id"` in JSON
-- Additional fields track due dates, priority levels, and task status
+**Important:** Save this token! It's only shown once.
 
-### 2. Thread-Safe Storage with Persistence
+#### Step 2: Use the API
 
-```go
-type TaskStore struct {
-    mu       sync.RWMutex  // Read-Write mutex for thread safety
-    tasks    map[int]*Task // In-memory storage
-    nextID   int           // Auto-incrementing ID counter
-    filePath string        // JSON file path
-}
+**View tasks (no authentication needed):**
+```bash
+# Get all tasks
+curl http://localhost:8080/api/v1/tasks
+
+# Get pending tasks only
+curl http://localhost:8080/api/v1/tasks/pending
+
+# Get specific task
+curl http://localhost:8080/api/v1/tasks/1
 ```
 
-**Why thread-safe with persistence?**
-- HTTP servers handle multiple requests simultaneously
-- Without locks, concurrent access could corrupt data
-- `sync.RWMutex` allows multiple readers OR one writer
-- Data persists to JSON file after each write operation
-- On startup, tasks are loaded from the JSON file
-
-### 3. CRUD Operations with File Persistence
-
-The TaskStore implements Create, Read, Update, Delete operations:
-
-- **Add()**: Creates new tasks with auto-incrementing IDs and saves to file
-- **Get()**: Retrieves a single task by ID
-- **GetAll()**: Returns all tasks as a slice
-- **GetPending()**: Returns only pending tasks
-- **Update()**: Modifies existing tasks and saves to file
-- **Delete()**: Removes tasks from storage and updates file
-- **loadFromFile()**: Loads tasks from JSON on startup
-- **saveToFile()**: Persists tasks to JSON after modifications
-
-### 4. HTTP Server & Token-Based Authentication
-
-TaskMate uses a secure token-based authentication system:
-
-```go
-func (s *Server) tokenAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-    return func(w http.ResponseWriter, r *http.Request) {
-        token := r.Header.Get("X-API-Token")
-        if token == "" {
-            http.Error(w, "Token required", http.StatusUnauthorized)
-            return
-        }
-        
-        // Hash and validate token
-        tokenHash := hashString(token)
-        // Check against stored token hashes
-        ...
-    }
-}
+**Create a task (requires token):**
+```bash
+curl -X POST http://localhost:8080/api/v1/tasks \
+  -H "X-API-Token: YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Deploy to Production",
+    "description": "Deploy v2.0 release",
+    "due_date": "2024-12-31",
+    "priority": "high"
+  }'
 ```
 
-**Authentication Flow:**
-1. **Password Protection**: Master password required to generate tokens
-2. **Token Generation**: Users request tokens by providing the password
-3. **Token Usage**: Tokens required for write operations (POST/PUT/DELETE)
-4. **Hash Storage**: All passwords and tokens stored as SHA-256 hashes
-5. **No Auth for Reads**: GET requests remain open for easy access
-
-**Security Features:**
-- Passwords and tokens never stored in plain text
-- SHA-256 hashing for all sensitive data
-- Multiple tokens supported for different users/applications
-- Thread-safe token validation
-
-### 5. JSON Handling
-
-```go
-// Reading JSON from request
-var req struct {
-    Title       string `json:"title"`
-    Description string `json:"description"`
-}
-json.NewDecoder(r.Body).Decode(&req)
-
-// Writing JSON response
-json.NewEncoder(w).Encode(todo)
+**Update a task (requires token):**
+```bash
+curl -X PUT http://localhost:8080/api/v1/tasks/1 \
+  -H "X-API-Token: YOUR_TOKEN_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Deploy to Production",
+    "description": "Deploy v2.0 release",
+    "due_date": "2024-12-31",
+    "priority": "high",
+    "status": "completed"
+  }'
 ```
 
-**JSON Processing:**
-- `json.NewDecoder()` reads JSON from HTTP request body
-- `json.NewEncoder()` writes Go structs as JSON to HTTP response
-- Go automatically handles the conversion using struct tags
+**Delete a task (requires token):**
+```bash
+curl -X DELETE http://localhost:8080/api/v1/tasks/1 \
+  -H "X-API-Token: YOUR_TOKEN_HERE"
+```
 
-## API Endpoints
+## API Reference
 
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
@@ -143,195 +137,98 @@ json.NewEncoder(w).Encode(todo)
 | PUT | `/api/v1/tasks/{id}` | Update task | Token |
 | DELETE | `/api/v1/tasks/{id}` | Delete task | Token |
 
-## Running the Application
+## Security
 
-1. **Install dependencies:**
-   ```bash
-   go mod tidy
-   ```
-
-2. **Create configuration file:**
-   ```bash
-   cp config.json.example config.json
-   ```
-   
-   Or create `config.json` manually:
-   ```json
-   {
-     "port": "8080",
-     "password_hash": "ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1",
-     "token_hashes": []
-   }
-   ```
-   
-   Default password is "randomforest". To use a different password, generate its SHA-256 hash:
-   ```bash
-   echo -n "your_password" | shasum -a 256
-   ```
-
-3. **Run the server:**
-   ```bash
-   go run main.go
-   ```
-
-4. **Access the Web UI:**
-   
-   Open your browser and visit: **http://localhost:8080**
-   
-   The UI provides:
-   - ✨ Beautiful, responsive interface
-   - ➕ Add tasks with title, description, due date, and priority
-   - 📋 View all tasks, pending tasks, or completed tasks
-   - ✓ Mark tasks as complete or reopen them
-   - 🗑 Delete tasks
-   - 🔄 Real-time updates when tasks are added/removed
-
-4. **Test the API (Optional):**
-
-   **Step 1: Generate an API Token**
-   
-   First, generate a token using the master password (default: "randomforest"):
-   
-   ```bash
-   curl -X POST http://localhost:8080/api/v1/auth/token \
-     -H "Content-Type: application/json" \
-     -d '{"password": "randomforest"}'
-   ```
-   
-   Response:
-   ```json
-   {
-     "token": "a1b2c3d4e5f6...",
-     "message": "Token generated successfully. Save this token securely, it won't be shown again."
-   }
-   ```
-   
-   **Important:** Save the token! It's only shown once and cannot be retrieved later.
-   
-   **Step 2: Use the Token for API Requests**
-   
-   ```bash
-   # Health check (no auth needed)
-   curl http://localhost:8080/health
-   
-   # Get all tasks (no auth needed)
-   curl http://localhost:8080/api/v1/tasks
-   
-   # Get pending tasks only (no auth needed)
-   curl http://localhost:8080/api/v1/tasks/pending
-   
-   # Create a task (requires token)
-   curl -X POST http://localhost:8080/api/v1/tasks \
-     -H "X-API-Token: YOUR_TOKEN_HERE" \
-     -H "Content-Type: application/json" \
-     -d '{"title": "Deploy to Production", "description": "Deploy v2.0 release", "due_date": "2024-12-31", "priority": "high"}'
-   
-   # Update a task (requires token)
-   curl -X PUT http://localhost:8080/api/v1/tasks/1 \
-     -H "X-API-Token: YOUR_TOKEN_HERE" \
-     -H "Content-Type: application/json" \
-     -d '{"title": "Deploy to Production", "description": "Deploy v2.0 release", "due_date": "2024-12-31", "priority": "high", "status": "completed"}'
-   
-   # Delete a task (requires token)
-   curl -X DELETE http://localhost:8080/api/v1/tasks/1 \
-     -H "X-API-Token: YOUR_TOKEN_HERE"
-   ```
-
-## Key Go Concepts Demonstrated
-
-### 1. Structs and Methods
-- Structs group related data
-- Methods are functions attached to types
-- Pointer receivers (`*TodoStore`) allow modification
-
-### 2. Interfaces
-- `http.HandlerFunc` is a function type that implements `http.Handler`
-- Interfaces define behavior contracts
-
-### 3. Goroutines and Concurrency
-- HTTP server automatically handles requests in separate goroutines
-- Mutexes prevent race conditions
-
-### 4. Error Handling
-- Go uses explicit error returns
-- HTTP errors are handled with appropriate status codes
-
-### 5. Package Management
-- `go.mod` defines module dependencies
-- Import statements bring in external packages
-
-### 6. File I/O
-- `os.ReadFile()` reads JSON data on startup
-- `os.WriteFile()` persists data after modifications
-- `json.Marshal()` converts structs to JSON
-- `json.Unmarshal()` converts JSON to structs
-
-## Authentication & Security
-
-### Token-Based Authentication
+### Authentication
 
 TaskMate uses a two-tier authentication system:
 
-1. **Password Authentication** (for token generation only)
-   - Master password stored as SHA-256 hash in `config.json`
-   - Required only when generating new tokens
-   - Default password: "randomforest"
+1. **Password Authentication** - Required only when generating tokens
+2. **Token Authentication** - Required for creating, updating, or deleting tasks
 
-2. **Token Authentication** (for write operations)
-   - Tokens required for POST, PUT, DELETE operations
-   - GET requests remain open (no authentication needed)
-   - Tokens stored as SHA-256 hashes in `config.json`
-   - Multiple tokens supported for different users/applications
+**Note:** Reading tasks (GET requests) doesn't require authentication.
 
-### Configuration File
+### Changing the Master Password
 
-The `config.json` file stores authentication data:
+1. Generate a SHA-256 hash of your new password:
+   ```bash
+   # On macOS/Linux
+   echo -n "your_new_password" | shasum -a 256
+   ```
+
+2. Update the `password_hash` field in `config.json` with the generated hash.
+
+3. Restart the server.
+
+### Security Features
+
+- Passwords and tokens are never stored in plain text
+- SHA-256 hashing for all sensitive data
+- Multiple tokens supported for different users/applications
+- Thread-safe operations
+
+## Docker Deployment
+
+### Using Docker
+
+```bash
+# Build the image
+docker build -t taskmate:latest .
+
+# Run the container
+docker run -d \
+  -p 8080:8080 \
+  -e TASKMATE_PASSWORD_HASH=ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1 \
+  -v $(pwd)/tasks.json:/app/tasks.json \
+  --name taskmate \
+  taskmate:latest
+```
+
+### Using Docker Compose
+
+```bash
+docker-compose up -d
+```
+
+### Environment Variables
+
+For containerized deployments, you can use environment variables:
+
+- `TASKMATE_PORT` - Server port (default: 8080)
+- `TASKMATE_PASSWORD_HASH` - SHA-256 hash of master password
+
+Generate a password hash:
+```bash
+echo -n "your_secure_password" | shasum -a 256
+```
+
+## Configuration
+
+TaskMate uses `config.json` for configuration:
 
 ```json
 {
   "api_key": "add-token",
   "port": "8080",
   "password_hash": "ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1",
-  "token_hashes": [
-    "hash_of_token_1",
-    "hash_of_token_2"
-  ]
+  "token_hashes": []
 }
 ```
 
-- `password_hash`: SHA-256 hash of master password (default: "randomforest")
-- `token_hashes`: Array of SHA-256 hashes of generated tokens
+- `port` - Server port
+- `password_hash` - SHA-256 hash of master password
+- `token_hashes` - Array of generated token hashes (managed automatically)
 
-### Changing the Master Password
+**Configuration Priority:**
+1. Environment variables (highest)
+2. config.json file
+3. Default values (lowest)
 
-To change the password, generate a new SHA-256 hash:
+## Data Storage
 
-```bash
-# On macOS/Linux
-echo -n "your_new_password" | shasum -a 256
+Tasks are stored in `tasks.json` in the current directory. The file is automatically created and updated as you manage tasks.
 
-# On Windows (PowerShell)
-$password = "your_new_password"
-$hash = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($password))
-[System.BitConverter]::ToString($hash).Replace("-", "").ToLower()
-```
-
-Then update the `password_hash` field in `config.json`.
-
-### Security Features
-
-- **No Plain Text Storage**: Passwords and tokens never stored in plain text
-- **SHA-256 Hashing**: Industry-standard cryptographic hashing
-- **Token Isolation**: Each user/application can have their own token
-- **Input Validation**: Check for required fields and valid data
-- **HTTP Status Codes**: Proper codes for different scenarios
-- **Thread Safety**: Prevent data races with mutexes
-- **File Permissions**: Config and data files created with 0644 permissions
-
-## Data Persistence
-
-Tasks are automatically saved to `tasks.json` in the current directory:
-
+Example:
 ```json
 [
   {
@@ -347,138 +244,57 @@ Tasks are automatically saved to `tasks.json` in the current directory:
 ]
 ```
 
-## Next Steps
-
-- Add database storage (PostgreSQL, MongoDB)
-- Implement user management and authentication
-- Add request logging and monitoring
-- Create unit and integration tests
-- Add configuration management
-- Implement task filtering and search
-
-## Docker Deployment
-
-### Building and Running with Docker
-
-1. **Build the Docker image:**
-   ```bash
-   docker build -t taskmate:latest .
-   ```
-
-2. **Run with Docker:**
-   ```bash
-   docker run -d \
-     -p 8080:8080 \
-     -e TASKMATE_PASSWORD_HASH=ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1 \
-     -v $(pwd)/tasks.json:/app/tasks.json \
-     -v $(pwd)/config.json:/app/config.json \
-     --name taskmate \
-     taskmate:latest
-   ```
-
-3. **Or use Docker Compose:**
-   ```bash
-   docker-compose up -d
-   ```
-
-### Environment Variables for Containers
-
-The application supports these environment variables for containerized deployments:
-
-- `TASKMATE_PORT`: Server port (default: 8080)
-- `TASKMATE_API_KEY`: Legacy API key (optional)
-- `TASKMATE_PASSWORD_HASH`: SHA-256 hash of master password (required for production)
-
-**Generate password hash for production:**
-```bash
-# On macOS/Linux
-echo -n "your_secure_password" | shasum -a 256
-
-# Use the output as TASKMATE_PASSWORD_HASH
-```
-
-### Configuration Priority
-
-1. Environment variables (highest priority - for containers)
-2. config.json file (if exists)
-3. Default values (lowest priority)
-
-This allows you to:
-- Use `config.json` for local development
-- Use environment variables for Docker/Kubernetes deployments
-- Commit `config.json.example` to git without exposing secrets
-
-This task management API serves as a foundation for understanding Go web development and prepares you for building more complex applications and tools like Terraform providers!
-
-## Development & CI/CD
+## Development
 
 ### Running Tests
 
 ```bash
-# Run all tests
 go test -v ./...
-
-# Run tests with coverage
-go test -v -race -coverprofile=coverage.out ./...
-
-# View coverage report
-go tool cover -html=coverage.out
 ```
 
-### Linting
+### Building from Source
 
 ```bash
-# Install golangci-lint
-go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-
-# Run linter
-golangci-lint run
+go build -o taskmate
+./taskmate
 ```
 
-### Docker
+## What You'll Learn (For Developers)
 
-```bash
-# Build image
-docker build -t taskmate:latest .
+This project demonstrates:
+- Building REST APIs in Go
+- HTTP routing with Gorilla Mux
+- JSON serialization and file persistence
+- Token-based authentication
+- Thread-safe data structures
+- Concurrent request handling
+- Docker containerization
 
-# Run container
-docker run -p 8080:8080 taskmate:latest
+## Architecture Overview (For Developers)
 
-# Run with custom config
-docker run -p 8080:8080 -v $(pwd)/config.json:/root/config.json taskmate:latest
-```
+### Core Components
 
-### GitHub Actions
+1. **Task Struct** - Represents a task with metadata
+2. **TaskStore** - Thread-safe storage with JSON persistence
+3. **Server** - HTTP server with authentication middleware
+4. **Router** - URL routing and endpoint handling
 
-The project includes automated CI/CD pipelines:
+### Key Concepts
 
-- **CI Pipeline** (on PR and push):
-  - Linting with golangci-lint
-  - Unit tests with race detection
-  - Build verification
-  - Integration tests
+**Thread-Safe Storage:**
+- Uses `sync.RWMutex` for concurrent access
+- Allows multiple readers or one writer
+- Prevents data corruption
 
-- **Release Pipeline** (on tag push):
-  - Multi-platform binary builds
-  - Docker image builds
-  - Automated GitHub releases
-  - Changelog generation
+**Authentication Middleware:**
+- Token validation for write operations
+- SHA-256 hash comparison
+- No authentication for read operations
 
-### Creating a Release
-
-See [VERSIONING.md](VERSIONING.md) for detailed versioning guidelines.
-
-Quick start:
-```bash
-# Beta release
-git tag v0.1.0-beta.1
-git push origin v0.1.0-beta.1
-
-# This triggers automatic:
-# - Binary builds for Linux, macOS, Windows
-# - Docker image builds
-# - GitHub release creation
-```
+**JSON Persistence:**
+- Automatic save after modifications
+- Load on startup
+- Human-readable format
 
 ## License
 
