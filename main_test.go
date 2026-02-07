@@ -11,7 +11,7 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func setupTestServer(t *testing.T) (*Server, func()) {
+func setupTestServer() (*Server, func()) {
 	// Create temporary config
 	config := &Config{
 		Port:         "8080",
@@ -73,7 +73,7 @@ func TestHealthEndpoint(t *testing.T) {
 }
 
 func TestGetTasksNoAuth(t *testing.T) {
-	server, cleanup := setupTestServer(t)
+	server, cleanup := setupTestServer()
 	defer cleanup()
 
 	req := httptest.NewRequest("GET", "/api/v1/tasks", nil)
@@ -96,7 +96,7 @@ func TestGetTasksNoAuth(t *testing.T) {
 }
 
 func TestGenerateTokenWithValidPassword(t *testing.T) {
-	server, cleanup := setupTestServer(t)
+	server, cleanup := setupTestServer()
 	defer cleanup()
 
 	reqBody := map[string]string{"password": "testpassword"}
@@ -123,7 +123,7 @@ func TestGenerateTokenWithValidPassword(t *testing.T) {
 }
 
 func TestGenerateTokenWithInvalidPassword(t *testing.T) {
-	server, cleanup := setupTestServer(t)
+	server, cleanup := setupTestServer()
 	defer cleanup()
 
 	reqBody := map[string]string{"password": "wrongpassword"}
@@ -141,7 +141,7 @@ func TestGenerateTokenWithInvalidPassword(t *testing.T) {
 }
 
 func TestCreateTaskWithoutToken(t *testing.T) {
-	server, cleanup := setupTestServer(t)
+	server, cleanup := setupTestServer()
 	defer cleanup()
 
 	reqBody := map[string]string{

@@ -42,7 +42,7 @@ func LoadConfig() (*Config, error) {
 	config := &Config{
 		TokenHashes: []string{},
 	}
-	
+
 	// Try to load from file first
 	data, err := os.ReadFile("config.json")
 	if err == nil {
@@ -50,7 +50,7 @@ func LoadConfig() (*Config, error) {
 			return nil, err
 		}
 	}
-	
+
 	// Override with environment variables if set (for containers)
 	if port := os.Getenv("TASKMATE_PORT"); port != "" {
 		config.Port = port
@@ -58,26 +58,26 @@ func LoadConfig() (*Config, error) {
 	if config.Port == "" {
 		config.Port = "8080" // Default port
 	}
-	
+
 	if apiKey := os.Getenv("TASKMATE_API_KEY"); apiKey != "" {
 		config.APIKey = apiKey
 	}
-	
+
 	if passwordHash := os.Getenv("TASKMATE_PASSWORD_HASH"); passwordHash != "" {
 		config.PasswordHash = passwordHash
 	}
-	
+
 	// If no password hash is set, use default (randomforest)
 	if config.PasswordHash == "" {
 		config.PasswordHash = "ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1"
 		log.Println("Warning: Using default password hash. Set TASKMATE_PASSWORD_HASH environment variable for production.")
 	}
-	
+
 	// Initialize token_hashes if nil
 	if config.TokenHashes == nil {
 		config.TokenHashes = []string{}
 	}
-	
+
 	return config, nil
 }
 
@@ -87,7 +87,7 @@ func SaveConfig(config *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile("config.json", data, 0644)
+	return os.WriteFile("config.json", data, 0600)
 }
 
 // hashString creates SHA-256 hash of input string
@@ -130,12 +130,12 @@ func (ts *TaskStore) loadFromFile() {
 	if err != nil {
 		return // File doesn't exist yet
 	}
-	
+
 	var tasks []*Task
 	if err := json.Unmarshal(data, &tasks); err != nil {
 		return
 	}
-	
+
 	for _, task := range tasks {
 		ts.tasks[task.ID] = task
 		if task.ID >= ts.nextID {
@@ -150,20 +150,20 @@ func (ts *TaskStore) saveToFile() error {
 	for _, task := range ts.tasks {
 		tasks = append(tasks, task)
 	}
-	
+
 	data, err := json.MarshalIndent(tasks, "", "  ")
 	if err != nil {
 		return err
 	}
-	
-	return os.WriteFile(ts.filePath, data, 0644)
+
+	return os.WriteFile(ts.filePath, data, 0600)
 }
 
 // Add creates a new task
 func (ts *TaskStore) Add(title, description, dueDate, priority string) *Task {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	
+
 	now := time.Now()
 	task := &Task{
 		ID:          ts.nextID,
@@ -175,10 +175,12 @@ func (ts *TaskStore) Add(title, description, dueDate, priority string) *Task {
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	
+
 	ts.tasks[ts.nextID] = task
 	ts.nextID++
-	ts.saveToFile()
+	if err := ts.saveToFile(); err != nil {
+		log.Printf("Failed to save tasks: %v", err)
+	}
 	return task
 }
 
@@ -194,7 +196,7 @@ func (ts *TaskStore) Get(id int) (*Task, bool) {
 func (ts *TaskStore) GetAll() []*Task {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-	
+
 	tasks := make([]*Task, 0, len(ts.tasks))
 	for _, task := range ts.tasks {
 		tasks = append(tasks, task)
@@ -206,7 +208,7 @@ func (ts *TaskStore) GetAll() []*Task {
 func (ts *TaskStore) GetPending() []*Task {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-	
+
 	tasks := make([]*Task, 0)
 	for _, task := range ts.tasks {
 		if task.Status == "pending" {
@@ -220,19 +222,21 @@ func (ts *TaskStore) GetPending() []*Task {
 func (ts *TaskStore) Update(id int, title, description, dueDate, priority, status string) (*Task, bool) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	
+
 	task, exists := ts.tasks[id]
 	if !exists {
 		return nil, false
 	}
-	
+
 	task.Title = title
 	task.Description = description
 	task.DueDate = dueDate
 	task.Priority = priority
 	task.Status = status
 	task.UpdatedAt = time.Now()
-	ts.saveToFile()
+	if err := ts.saveToFile(); err != nil {
+		log.Printf("Failed to save tasks: %v", err)
+	}
 	return task, true
 }
 
@@ -240,11 +244,13 @@ func (ts *TaskStore) Update(id int, title, description, dueDate, priority, statu
 func (ts *TaskStore) Delete(id int) bool {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	
+
 	_, exists := ts.tasks[id]
 	if exists {
 		delete(ts.tasks, id)
-		ts.saveToFile()
+		if err := ts.saveToFile(); err != nil {
+			log.Printf("Failed to save tasks: %v", err)
+		}
 	}
 	return exists
 }
@@ -272,10 +278,10 @@ func (s *Server) tokenAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			http.Error(w, "Token required", http.StatusUnauthorized)
 			return
 		}
-		
+
 		// Hash the provided token
 		tokenHash := hashString(token)
-		
+
 		// Check if token hash exists in config
 		s.mu.RLock()
 		valid := false
@@ -286,12 +292,12 @@ func (s *Server) tokenAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			}
 		}
 		s.mu.RUnlock()
-		
+
 		if !valid {
 			http.Error(w, "Invalid token", http.StatusUnauthorized)
 			return
 		}
-		
+
 		next(w, r)
 	}
 }
@@ -300,14 +306,18 @@ func (s *Server) tokenAuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := s.store.GetAll()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tasks)
+	if err := json.NewEncoder(w).Encode(tasks); err != nil {
+		log.Printf("Failed to encode tasks: %v", err)
+	}
 }
 
 // handleGetPendingTasks returns only pending tasks
 func (s *Server) handleGetPendingTasks(w http.ResponseWriter, r *http.Request) {
 	tasks := s.store.GetPending()
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(tasks)
+	if err := json.NewEncoder(w).Encode(tasks); err != nil {
+		log.Printf("Failed to encode tasks: %v", err)
+	}
 }
 
 // handleGetTask returns a specific task
@@ -318,15 +328,17 @@ func (s *Server) handleGetTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid task ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	task, exists := s.store.Get(id)
 	if !exists {
 		http.Error(w, "Task not found", http.StatusNotFound)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(task)
+	if err := json.NewEncoder(w).Encode(task); err != nil {
+		log.Printf("Failed to encode task: %v", err)
+	}
 }
 
 // handleCreateTask creates a new task
@@ -337,25 +349,27 @@ func (s *Server) handleCreateTask(w http.ResponseWriter, r *http.Request) {
 		DueDate     string `json:"due_date"`
 		Priority    string `json:"priority"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
 	if strings.TrimSpace(req.Title) == "" {
 		http.Error(w, "Title is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	if req.Priority == "" {
 		req.Priority = "medium"
 	}
-	
+
 	task := s.store.Add(req.Title, req.Description, req.DueDate, req.Priority)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(task)
+	if err := json.NewEncoder(w).Encode(task); err != nil {
+		log.Printf("Failed to encode task: %v", err)
+	}
 }
 
 // handleUpdateTask updates an existing task
@@ -366,7 +380,7 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid task ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	var req struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
@@ -374,25 +388,27 @@ func (s *Server) handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 		Priority    string `json:"priority"`
 		Status      string `json:"status"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
 	if strings.TrimSpace(req.Title) == "" {
 		http.Error(w, "Title is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	task, exists := s.store.Update(id, req.Title, req.Description, req.DueDate, req.Priority, req.Status)
 	if !exists {
 		http.Error(w, "Task not found", http.StatusNotFound)
 		return
 	}
-	
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(task)
+	if err := json.NewEncoder(w).Encode(task); err != nil {
+		log.Printf("Failed to encode task: %v", err)
+	}
 }
 
 // handleDeleteTask deletes a task
@@ -403,12 +419,12 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid task ID", http.StatusBadRequest)
 		return
 	}
-	
+
 	if !s.store.Delete(id) {
 		http.Error(w, "Task not found", http.StatusNotFound)
 		return
 	}
-	
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -417,39 +433,39 @@ func (s *Server) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Password string `json:"password"`
 	}
-	
+
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
-	
+
 	if strings.TrimSpace(req.Password) == "" {
 		http.Error(w, "Password is required", http.StatusBadRequest)
 		return
 	}
-	
+
 	// Hash the provided password and compare with stored hash
 	passwordHash := hashString(req.Password)
-	
+
 	s.mu.RLock()
 	storedPasswordHash := s.config.PasswordHash
 	s.mu.RUnlock()
-	
+
 	if passwordHash != storedPasswordHash {
 		http.Error(w, "Invalid password", http.StatusUnauthorized)
 		return
 	}
-	
+
 	// Generate new token
 	token, err := generateToken()
 	if err != nil {
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Hash the token and store it
 	tokenHash := hashString(token)
-	
+
 	s.mu.Lock()
 	s.config.TokenHashes = append(s.config.TokenHashes, tokenHash)
 	if err := SaveConfig(s.config); err != nil {
@@ -458,14 +474,16 @@ func (s *Server) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.mu.Unlock()
-	
+
 	// Return the token to the user (only time they'll see it)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]string{
-		"token": token,
+	if err := json.NewEncoder(w).Encode(map[string]string{
+		"token":   token,
 		"message": "Token generated successfully. Save this token securely, it won't be shown again.",
-	})
+	}); err != nil {
+		log.Printf("Failed to encode response: %v", err)
+	}
 }
 
 func main() {
@@ -474,49 +492,53 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
-	
+
 	port := config.Port
 	dataFile := "tasks.json"
 	server := NewServer(config, dataFile)
-	
+
 	r := mux.NewRouter()
-	
+
 	// Serve static files (HTML/CSS/JS)
 	r.PathPrefix("/static/").Handler(http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
-	
+
 	// Serve UI at root
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		http.ServeFile(w, r, "static/index.html")
 	}).Methods("GET")
-	
+
 	// API routes
 	api := r.PathPrefix("/api/v1").Subrouter()
-	
+
 	// Token generation endpoint (requires password)
 	api.HandleFunc("/auth/token", server.handleGenerateToken).Methods("POST")
-	
+
 	// GET requests - no authentication required
 	api.HandleFunc("/tasks", server.handleGetTasks).Methods("GET")
 	api.HandleFunc("/tasks/pending", server.handleGetPendingTasks).Methods("GET")
 	api.HandleFunc("/tasks/{id}", server.handleGetTask).Methods("GET")
-	
+
 	// POST/PUT/DELETE requests - require token authentication
 	api.HandleFunc("/tasks", server.tokenAuthMiddleware(server.handleCreateTask)).Methods("POST")
 	api.HandleFunc("/tasks/{id}", server.tokenAuthMiddleware(server.handleUpdateTask)).Methods("PUT")
 	api.HandleFunc("/tasks/{id}", server.tokenAuthMiddleware(server.handleDeleteTask)).Methods("DELETE")
-	
+
 	// Serve config endpoint for UI (deprecated - will be removed)
 	r.HandleFunc("/api/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"message": "Use token-based authentication"})
+		if err := json.NewEncoder(w).Encode(map[string]string{"message": "Use token-based authentication"}); err != nil {
+			log.Printf("Failed to encode response: %v", err)
+		}
 	}).Methods("GET")
-	
+
 	// Health check endpoint (no auth required)
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("OK"))
+		if _, err := w.Write([]byte("OK")); err != nil {
+			log.Printf("Failed to write response: %v", err)
+		}
 	}).Methods("GET")
-	
+
 	fmt.Println("TaskMate API server starting on :" + port)
 	fmt.Printf("Data File: %s\n", dataFile)
 	fmt.Println("\n🌐 Web UI: http://localhost:" + port)
@@ -530,6 +552,14 @@ func main() {
 	fmt.Println("  POST   /api/v1/tasks          - Create task (requires token)")
 	fmt.Println("  PUT    /api/v1/tasks/{id}     - Update task (requires token)")
 	fmt.Println("  DELETE /api/v1/tasks/{id}     - Delete task (requires token)")
-	
-	log.Fatal(http.ListenAndServe(":" + port, r))
+
+	srv := &http.Server{
+		Addr:         ":" + port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.Fatal(srv.ListenAndServe())
 }
