@@ -29,7 +29,7 @@ TaskMate is a lightweight task management application with a REST API and web in
    cp config.json.example config.json
    ```
    
-   The default password is `randomforest`. You can change it later (see [Security](#changing-the-master-password) section).
+   **Important:** The example config includes a default password. Change it immediately for security (see [Security](#changing-the-master-password) section).
 
 4. **Start the server:**
    ```bash
@@ -64,7 +64,7 @@ To create, update, or delete tasks via API, you need a token. Generate one using
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/token \
   -H "Content-Type: application/json" \
-  -d '{"password": "randomforest"}'
+  -d '{"password": "your_password_here"}'
 ```
 
 Response:
@@ -76,6 +76,8 @@ Response:
 ```
 
 **Important:** Save this token! It's only shown once.
+
+**Note:** The default password is set in `config.json`. For production use, change it immediately (see [Security](#changing-the-master-password) section).
 
 #### Step 2: Use the API
 
@@ -148,12 +150,21 @@ TaskMate uses a two-tier authentication system:
 
 **Note:** Reading tasks (GET requests) doesn't require authentication.
 
+**Security Warning:** The example configuration includes a default password hash. Always change this before deploying to production or exposing the application to the internet.
+
 ### Changing the Master Password
+
+**Important:** Change the default password before deploying to production!
 
 1. Generate a SHA-256 hash of your new password:
    ```bash
    # On macOS/Linux
    echo -n "your_new_password" | shasum -a 256
+   
+   # On Windows (PowerShell)
+   $password = "your_new_password"
+   $hash = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($password))
+   [System.BitConverter]::ToString($hash).Replace("-", "").ToLower()
    ```
 
 2. Update the `password_hash` field in `config.json` with the generated hash.

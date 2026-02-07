@@ -46,6 +46,29 @@
             margin-bottom: 20px;
         }
 
+        .auth-banner {
+            background: #fef5e7;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .auth-banner.success {
+            background: #d5f4e6;
+            border-left-color: #27ae60;
+        }
+
+        .auth-input-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .auth-input-group input {
+            flex: 1;
+        }
+
         .form-group {
             margin-bottom: 15px;
         }
@@ -104,6 +127,15 @@
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
 
+        .btn-secondary {
+            background: #f39c12;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #e67e22;
+        }
+
         .btn-complete {
             background: #48bb78;
             color: white;
@@ -124,6 +156,11 @@
 
         .btn-delete:hover {
             background: #e53e3e;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
         }
 
         .filter-tabs {
@@ -259,6 +296,25 @@
             <p>Your friendly task management companion</p>
         </div>
 
+        <div id="authBanner" class="card" style="display: none;">
+            <div class="auth-banner">
+                <strong>🔐 Authentication Required</strong>
+                <p style="margin-top: 5px; font-size: 14px;">Enter your API token to add, edit, or delete tasks. Viewing tasks doesn't require authentication.</p>
+                <div class="auth-input-group">
+                    <input type="password" id="tokenInput" placeholder="Enter your API token">
+                    <button class="btn btn-secondary" onclick="saveToken()">Save Token</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="authSuccess" class="card" style="display: none;">
+            <div class="auth-banner success">
+                <strong>✓ Authenticated</strong>
+                <p style="margin-top: 5px; font-size: 14px;">You can now add, edit, and delete tasks.</p>
+                <button class="btn btn-delete" style="margin-top: 10px;" onclick="clearToken()">Clear Token</button>
+            </div>
+        </div>
+
         <div class="card">
             <h2 style="margin-bottom: 20px;">➕ Add New Task</h2>
             <form id="taskForm">
@@ -288,7 +344,7 @@
                     </div>
                 </div>
                 
-                <button type="submit" class="btn btn-primary">Add Task</button>
+                <button type="submit" class="btn btn-primary" id="addTaskBtn">Add Task</button>
             </form>
         </div>
 
@@ -304,28 +360,45 @@
     </div>
 
     <script>
-        let API_KEY = '';
         const API_BASE = '/api/v1';
         let currentFilter = 'all';
+        let apiToken = localStorage.getItem('taskmate_token') || '';
 
-        // Load API key from config
-        async function loadConfig() {
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
-                API_KEY = config.api_key;
-                loadTasks();
-            } catch (error) {
-                console.error('Error loading config:', error);
+        // Check token status on load
+        function checkAuth() {
+            if (apiToken) {
+                document.getElementById('authBanner').style.display = 'none';
+                document.getElementById('authSuccess').style.display = 'block';
+                document.getElementById('addTaskBtn').disabled = false;
+            } else {
+                document.getElementById('authBanner').style.display = 'block';
+                document.getElementById('authSuccess').style.display = 'none';
+                document.getElementById('addTaskBtn').disabled = true;
             }
+        }
+
+        // Save token
+        function saveToken() {
+            const token = document.getElementById('tokenInput').value.trim();
+            if (token) {
+                apiToken = token;
+                localStorage.setItem('taskmate_token', token);
+                document.getElementById('tokenInput').value = '';
+                checkAuth();
+            }
+        }
+
+        // Clear token
+        function clearToken() {
+            apiToken = '';
+            localStorage.removeItem('taskmate_token');
+            checkAuth();
         }
 
         // Fetch and display tasks
         async function loadTasks() {
             try {
-                const response = await fetch(`${API_BASE}/tasks`, {
-                    headers: { 'X-API-Key': API_KEY }
-                });
+                const response = await fetch(`${API_BASE}/tasks`);
                 const tasks = await response.json();
                 displayTasks(tasks);
             } catch (error) {
@@ -369,10 +442,10 @@
                     ${task.description ? `<div class="task-description">${escapeHtml(task.description)}</div>` : ''}
                     <div class="task-actions">
                         ${task.status === 'pending' ? 
-                            `<button class="btn btn-complete" onclick="completeTask(${task.id})">✓ Complete</button>` : 
-                            `<button class="btn btn-complete" onclick="reopenTask(${task.id})">↻ Reopen</button>`
+                            `<button class="btn btn-complete" onclick="completeTask(${task.id})" ${!apiToken ? 'disabled' : ''}>✓ Complete</button>` : 
+                            `<button class="btn btn-complete" onclick="reopenTask(${task.id})" ${!apiToken ? 'disabled' : ''}>↻ Reopen</button>`
                         }
-                        <button class="btn btn-delete" onclick="deleteTask(${task.id})">🗑 Delete</button>
+                        <button class="btn btn-delete" onclick="deleteTask(${task.id})" ${!apiToken ? 'disabled' : ''}>🗑 Delete</button>
                     </div>
                 </div>
             `).join('');
@@ -382,6 +455,11 @@
         document.getElementById('taskForm').addEventListener('submit', async (e) => {
             e.preventDefault();
             
+            if (!apiToken) {
+                alert('Please enter your API token first');
+                return;
+            }
+
             const task = {
                 title: document.getElementById('title').value,
                 description: document.getElementById('description').value,
@@ -394,7 +472,7 @@
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
+                        'X-API-Token': apiToken
                     },
                     body: JSON.stringify(task)
                 });
@@ -402,30 +480,44 @@
                 if (response.ok) {
                     document.getElementById('taskForm').reset();
                     loadTasks();
+                } else if (response.status === 401) {
+                    alert('Invalid token. Please check your token and try again.');
+                    clearToken();
+                } else {
+                    alert('Error creating task');
                 }
             } catch (error) {
                 console.error('Error creating task:', error);
+                alert('Error creating task');
             }
         });
 
         // Complete task
         async function completeTask(id) {
+            if (!apiToken) {
+                alert('Please enter your API token first');
+                return;
+            }
+
             try {
-                const response = await fetch(`${API_BASE}/tasks/${id}`, {
-                    headers: { 'X-API-Key': API_KEY }
-                });
+                const response = await fetch(`${API_BASE}/tasks/${id}`);
                 const task = await response.json();
 
-                await fetch(`${API_BASE}/tasks/${id}`, {
+                const updateResponse = await fetch(`${API_BASE}/tasks/${id}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
+                        'X-API-Token': apiToken
                     },
                     body: JSON.stringify({ ...task, status: 'completed' })
                 });
 
-                loadTasks();
+                if (updateResponse.ok) {
+                    loadTasks();
+                } else if (updateResponse.status === 401) {
+                    alert('Invalid token. Please check your token and try again.');
+                    clearToken();
+                }
             } catch (error) {
                 console.error('Error completing task:', error);
             }
@@ -433,22 +525,30 @@
 
         // Reopen task
         async function reopenTask(id) {
+            if (!apiToken) {
+                alert('Please enter your API token first');
+                return;
+            }
+
             try {
-                const response = await fetch(`${API_BASE}/tasks/${id}`, {
-                    headers: { 'X-API-Key': API_KEY }
-                });
+                const response = await fetch(`${API_BASE}/tasks/${id}`);
                 const task = await response.json();
 
-                await fetch(`${API_BASE}/tasks/${id}`, {
+                const updateResponse = await fetch(`${API_BASE}/tasks/${id}`, {
                     method: 'PUT',
                     headers: {
                         'Content-Type': 'application/json',
-                        'X-API-Key': API_KEY
+                        'X-API-Token': apiToken
                     },
                     body: JSON.stringify({ ...task, status: 'pending' })
                 });
 
-                loadTasks();
+                if (updateResponse.ok) {
+                    loadTasks();
+                } else if (updateResponse.status === 401) {
+                    alert('Invalid token. Please check your token and try again.');
+                    clearToken();
+                }
             } catch (error) {
                 console.error('Error reopening task:', error);
             }
@@ -456,15 +556,25 @@
 
         // Delete task
         async function deleteTask(id) {
+            if (!apiToken) {
+                alert('Please enter your API token first');
+                return;
+            }
+
             if (!confirm('Are you sure you want to delete this task?')) return;
 
             try {
-                await fetch(`${API_BASE}/tasks/${id}`, {
+                const response = await fetch(`${API_BASE}/tasks/${id}`, {
                     method: 'DELETE',
-                    headers: { 'X-API-Key': API_KEY }
+                    headers: { 'X-API-Token': apiToken }
                 });
 
-                loadTasks();
+                if (response.ok) {
+                    loadTasks();
+                } else if (response.status === 401) {
+                    alert('Invalid token. Please check your token and try again.');
+                    clearToken();
+                }
             } catch (error) {
                 console.error('Error deleting task:', error);
             }
@@ -487,8 +597,9 @@
             return div.innerHTML;
         }
 
-        // Load config and tasks on page load
-        loadConfig();
+        // Initialize on page load
+        checkAuth();
+        loadTasks();
     </script>
 </body>
 </html>
