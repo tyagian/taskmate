@@ -428,34 +428,8 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleGenerateToken generates a new API token after password verification
+// handleGenerateToken generates a new API token without password verification (educational use only)
 func (s *Server) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Password string `json:"password"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if strings.TrimSpace(req.Password) == "" {
-		http.Error(w, "Password is required", http.StatusBadRequest)
-		return
-	}
-
-	// Hash the provided password and compare with stored hash
-	passwordHash := hashString(req.Password)
-
-	s.mu.RLock()
-	storedPasswordHash := s.config.PasswordHash
-	s.mu.RUnlock()
-
-	if passwordHash != storedPasswordHash {
-		http.Error(w, "Invalid password", http.StatusUnauthorized)
-		return
-	}
-
 	// Generate new token
 	token, err := generateToken()
 	if err != nil {
@@ -545,7 +519,7 @@ func main() {
 	fmt.Println("Health check: http://localhost:" + port + "/health")
 	fmt.Println("API Base URL: http://localhost:" + port + "/api/v1")
 	fmt.Println("\nEndpoints:")
-	fmt.Println("  POST   /api/v1/auth/token     - Generate token (requires password)")
+	fmt.Println("  POST   /api/v1/auth/token     - Generate token (no auth required)")
 	fmt.Println("  GET    /api/v1/tasks          - List all tasks (no auth)")
 	fmt.Println("  GET    /api/v1/tasks/pending  - List pending tasks (no auth)")
 	fmt.Println("  GET    /api/v1/tasks/{id}     - Get task (no auth)")

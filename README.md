@@ -28,8 +28,6 @@ TaskMate is a lightweight task management application with a REST API and web in
    ```bash
    cp config.json.example config.json
    ```
-   
-   **Important:** The example config includes a default password. Change it immediately for security (see [Security](#changing-the-master-password) section).
 
 4. **Start the server:**
    ```bash
@@ -59,12 +57,11 @@ TaskMate provides a REST API for programmatic access.
 
 #### Step 1: Generate an API Token
 
-To create, update, or delete tasks via API, you need a token. Generate one using the master password:
+To create, update, or delete tasks via API, you need a token. Request one from the API:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{"password": "your_password_here"}'
+  -H "Content-Type: application/json"
 ```
 
 Response:
@@ -77,7 +74,7 @@ Response:
 
 **Important:** Save this token! It's only shown once.
 
-**Note:** The default password is set in `config.json`. For production use, change it immediately (see [Security](#changing-the-master-password) section).
+**Note:** For educational purposes, no password is required to generate tokens. In production, you should add proper authentication.
 
 #### Step 2: Use the API
 
@@ -131,7 +128,7 @@ curl -X DELETE http://localhost:8080/api/v1/tasks/1 \
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | GET | `/health` | Health check | None |
-| POST | `/api/v1/auth/token` | Generate API token | Password |
+| POST | `/api/v1/auth/token` | Generate API token | None |
 | GET | `/api/v1/tasks` | Get all tasks | None |
 | GET | `/api/v1/tasks/pending` | Get pending tasks only | None |
 | GET | `/api/v1/tasks/{id}` | Get specific task | None |
@@ -143,14 +140,14 @@ curl -X DELETE http://localhost:8080/api/v1/tasks/1 \
 
 ### Authentication
 
-TaskMate uses a two-tier authentication system:
+TaskMate uses token-based authentication for educational purposes:
 
-1. **Password Authentication** - Required only when generating tokens
+1. **Token Generation** - Anyone can request a token (no password required)
 2. **Token Authentication** - Required for creating, updating, or deleting tasks
 
 **Note:** Reading tasks (GET requests) doesn't require authentication.
 
-**Security Warning:** The example configuration includes a default password hash. Always change this before deploying to production or exposing the application to the internet.
+**Educational Use:** This simplified authentication is designed for learning purposes. For production use, implement proper password protection or OAuth.
 
 ### Changing the Master Password
 

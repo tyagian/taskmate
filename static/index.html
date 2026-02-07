@@ -299,9 +299,10 @@
         <div id="authBanner" class="card" style="display: none;">
             <div class="auth-banner">
                 <strong>🔐 Authentication Required</strong>
-                <p style="margin-top: 5px; font-size: 14px;">Enter your API token to add, edit, or delete tasks. Viewing tasks doesn't require authentication.</p>
+                <p style="margin-top: 5px; font-size: 14px;">Get an API token to add, edit, or delete tasks. Viewing tasks doesn't require authentication.</p>
                 <div class="auth-input-group">
-                    <input type="password" id="tokenInput" placeholder="Enter your API token">
+                    <button class="btn btn-secondary" onclick="requestToken()" style="flex: 0 0 auto;">Get New Token</button>
+                    <input type="password" id="tokenInput" placeholder="Or paste your existing token here">
                     <button class="btn btn-secondary" onclick="saveToken()">Save Token</button>
                 </div>
             </div>
@@ -385,6 +386,31 @@
                 localStorage.setItem('taskmate_token', token);
                 document.getElementById('tokenInput').value = '';
                 checkAuth();
+            }
+        }
+
+        // Request new token from API
+        async function requestToken() {
+            try {
+                const response = await fetch(`${API_BASE}/auth/token`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    apiToken = data.token;
+                    localStorage.setItem('taskmate_token', data.token);
+                    checkAuth();
+                    alert('Token generated successfully!\n\nYour token: ' + data.token + '\n\nIt has been saved automatically. Keep it safe!');
+                } else {
+                    alert('Failed to generate token. Please try again.');
+                }
+            } catch (error) {
+                console.error('Error requesting token:', error);
+                alert('Error requesting token. Please try again.');
             }
         }
 
