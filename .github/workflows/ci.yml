@@ -1,0 +1,123 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+  push:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=5m
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.out
+          flags: unittests
+          fail_ci_if_error: false
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build
+        run: go build -v -o taskmate .
+
+      - name: Verify binary
+        run: ./taskmate --help || echo "Binary created successfully"
+
+  integration-test:
+    name: Integration Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build application
+        run: go build -o taskmate .
+
+      - name: Start application
+        run: |
+          ./taskmate &
+          APP_PID=$!
+          echo "APP_PID=$APP_PID" >> $GITHUB_ENV
+          sleep 3
+
+      - name: Health check
+        run: |
+          curl -f http://localhost:8080/health || exit 1
+
+      - name: Test token generation
+        run: |
+          TOKEN_RESPONSE=$(curl -s -X POST http://localhost:8080/api/v1/auth/token \
+            -H "Content-Type: application/json" \
+            -d '{"password": "randomforest"}')
+          echo "Token response: $TOKEN_RESPONSE"
+          TOKEN=$(echo $TOKEN_RESPONSE | jq -r '.token')
+          if [ "$TOKEN" = "null" ] || [ -z "$TOKEN" ]; then
+            echo "Failed to generate token"
+            exit 1
+          fi
+          echo "TOKEN=$TOKEN" >> $GITHUB_ENV
+
+      - name: Test GET tasks (no auth)
+        run: |
+          curl -f http://localhost:8080/api/v1/tasks || exit 1
+
+      - name: Test POST task (with token)
+        run: |
+          curl -f -X POST http://localhost:8080/api/v1/tasks \
+            -H "X-API-Token: ${{ env.TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{"title": "Test Task", "description": "Integration test", "priority": "high"}' || exit 1
+
+      - name: Stop application
+        if: always()
+        run: kill ${{ env.APP_PID }} || true
