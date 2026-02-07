@@ -1,0 +1,21 @@
+version: '3.8'
+
+services:
+  taskmate:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - TASKMATE_PORT=8080
+      - TASKMATE_PASSWORD_HASH=ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1
+      # To use a custom password, generate SHA-256 hash:
+      # echo -n "your_password" | shasum -a 256
+      # Then set TASKMATE_PASSWORD_HASH to the hash value
+    volumes:
+      - taskmate-data:/app/data
+      - ./tasks.json:/app/tasks.json
+      - ./config.json:/app/config.json
+    restart: unless-stopped
+
+volumes:
+  taskmate-data:

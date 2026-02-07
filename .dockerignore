@@ -1,0 +1,8 @@
+.git
+.github
+*.md
+.gitignore
+.golangci.yml
+tasks.json
+*.log
+.DS_Store
