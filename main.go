@@ -31,12 +31,12 @@ type Task struct {
 
 // Config holds application configuration
 type Config struct {
-	APIKey       string   `json:"api_key"`
-	Port         string   `json:"port"`
-	PasswordHash string   `json:"password_hash"`
-	TokenHashes  []string `json:"token_hashes"`
+	APIKey      string   `json:"api_key"`
+	Port        string   `json:"port"`
+	TokenHashes []string `json:"token_hashes"`
 }
 
+// LoadConfig reads configuration from config.json or environment variables
 // LoadConfig reads configuration from config.json or environment variables
 func LoadConfig() (*Config, error) {
 	config := &Config{
@@ -61,16 +61,6 @@ func LoadConfig() (*Config, error) {
 
 	if apiKey := os.Getenv("TASKMATE_API_KEY"); apiKey != "" {
 		config.APIKey = apiKey
-	}
-
-	if passwordHash := os.Getenv("TASKMATE_PASSWORD_HASH"); passwordHash != "" {
-		config.PasswordHash = passwordHash
-	}
-
-	// If no password hash is set, use default (randomforest)
-	if config.PasswordHash == "" {
-		config.PasswordHash = "ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1"
-		log.Println("Warning: Using default password hash. Set TASKMATE_PASSWORD_HASH environment variable for production.")
 	}
 
 	// Initialize token_hashes if nil
@@ -428,34 +418,8 @@ func (s *Server) handleDeleteTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleGenerateToken generates a new API token after password verification
+// handleGenerateToken generates a new API token without password verification (educational use only)
 func (s *Server) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Password string `json:"password"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if strings.TrimSpace(req.Password) == "" {
-		http.Error(w, "Password is required", http.StatusBadRequest)
-		return
-	}
-
-	// Hash the provided password and compare with stored hash
-	passwordHash := hashString(req.Password)
-
-	s.mu.RLock()
-	storedPasswordHash := s.config.PasswordHash
-	s.mu.RUnlock()
-
-	if passwordHash != storedPasswordHash {
-		http.Error(w, "Invalid password", http.StatusUnauthorized)
-		return
-	}
-
 	// Generate new token
 	token, err := generateToken()
 	if err != nil {
@@ -487,6 +451,48 @@ func (s *Server) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Parse command line flags
+	helpFlag := false
+	versionFlag := false
+	for _, arg := range os.Args[1:] {
+		if arg == "-h" || arg == "--help" {
+			helpFlag = true
+		}
+		if arg == "-v" || arg == "--version" {
+			versionFlag = true
+		}
+	}
+
+	if helpFlag {
+		fmt.Println("TaskMate - Simple Task Management API")
+		fmt.Println("\nUsage:")
+		fmt.Println("  taskmate [options]")
+		fmt.Println("\nOptions:")
+		fmt.Println("  -h, --help     Show this help message")
+		fmt.Println("  -v, --version  Show version information")
+		fmt.Println("\nEnvironment Variables:")
+		fmt.Println("  TASKMATE_PORT     Server port (default: 8080)")
+		fmt.Println("  TASKMATE_API_KEY  Legacy API key (optional)")
+		fmt.Println("\nConfiguration:")
+		fmt.Println("  Config file: config.json")
+		fmt.Println("  Data file:   tasks.json")
+		fmt.Println("\nEndpoints:")
+		fmt.Println("  POST   /api/v1/auth/token     - Generate token (no auth required)")
+		fmt.Println("  GET    /api/v1/tasks          - List all tasks (no auth)")
+		fmt.Println("  GET    /api/v1/tasks/pending  - List pending tasks (no auth)")
+		fmt.Println("  GET    /api/v1/tasks/{id}     - Get task (no auth)")
+		fmt.Println("  POST   /api/v1/tasks          - Create task (requires token)")
+		fmt.Println("  PUT    /api/v1/tasks/{id}     - Update task (requires token)")
+		fmt.Println("  DELETE /api/v1/tasks/{id}     - Delete task (requires token)")
+		os.Exit(0)
+	}
+
+	if versionFlag {
+		fmt.Println("TaskMate v1.0.0")
+		fmt.Println("Educational task management API")
+		os.Exit(0)
+	}
+
 	// Load configuration
 	config, err := LoadConfig()
 	if err != nil {
@@ -545,7 +551,7 @@ func main() {
 	fmt.Println("Health check: http://localhost:" + port + "/health")
 	fmt.Println("API Base URL: http://localhost:" + port + "/api/v1")
 	fmt.Println("\nEndpoints:")
-	fmt.Println("  POST   /api/v1/auth/token     - Generate token (requires password)")
+	fmt.Println("  POST   /api/v1/auth/token     - Generate token (no auth required)")
 	fmt.Println("  GET    /api/v1/tasks          - List all tasks (no auth)")
 	fmt.Println("  GET    /api/v1/tasks/pending  - List pending tasks (no auth)")
 	fmt.Println("  GET    /api/v1/tasks/{id}     - Get task (no auth)")

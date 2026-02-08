@@ -28,8 +28,6 @@ TaskMate is a lightweight task management application with a REST API and web in
    ```bash
    cp config.json.example config.json
    ```
-   
-   The default password is `randomforest`. You can change it later (see [Security](#changing-the-master-password) section).
 
 4. **Start the server:**
    ```bash
@@ -59,12 +57,11 @@ TaskMate provides a REST API for programmatic access.
 
 #### Step 1: Generate an API Token
 
-To create, update, or delete tasks via API, you need a token. Generate one using the master password:
+To create, update, or delete tasks via API, you need a token. Request one from the API:
 
 ```bash
 curl -X POST http://localhost:8080/api/v1/auth/token \
-  -H "Content-Type: application/json" \
-  -d '{"password": "randomforest"}'
+  -H "Content-Type: application/json"
 ```
 
 Response:
@@ -76,6 +73,8 @@ Response:
 ```
 
 **Important:** Save this token! It's only shown once.
+
+**Note:** For educational purposes, no password is required to generate tokens. In production, you should add proper authentication.
 
 #### Step 2: Use the API
 
@@ -129,7 +128,7 @@ curl -X DELETE http://localhost:8080/api/v1/tasks/1 \
 | Method | Endpoint | Description | Auth Required |
 |--------|----------|-------------|---------------|
 | GET | `/health` | Health check | None |
-| POST | `/api/v1/auth/token` | Generate API token | Password |
+| POST | `/api/v1/auth/token` | Generate API token | None |
 | GET | `/api/v1/tasks` | Get all tasks | None |
 | GET | `/api/v1/tasks/pending` | Get pending tasks only | None |
 | GET | `/api/v1/tasks/{id}` | Get specific task | None |
@@ -141,19 +140,28 @@ curl -X DELETE http://localhost:8080/api/v1/tasks/1 \
 
 ### Authentication
 
-TaskMate uses a two-tier authentication system:
+TaskMate uses token-based authentication for educational purposes:
 
-1. **Password Authentication** - Required only when generating tokens
+1. **Token Generation** - Anyone can request a token (no password required)
 2. **Token Authentication** - Required for creating, updating, or deleting tasks
 
 **Note:** Reading tasks (GET requests) doesn't require authentication.
 
+**Educational Use:** This simplified authentication is designed for learning purposes. For production use, implement proper password protection or OAuth.
+
 ### Changing the Master Password
+
+**Important:** Change the default password before deploying to production!
 
 1. Generate a SHA-256 hash of your new password:
    ```bash
    # On macOS/Linux
    echo -n "your_new_password" | shasum -a 256
+   
+   # On Windows (PowerShell)
+   $password = "your_new_password"
+   $hash = [System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($password))
+   [System.BitConverter]::ToString($hash).Replace("-", "").ToLower()
    ```
 
 2. Update the `password_hash` field in `config.json` with the generated hash.
