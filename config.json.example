@@ -1,6 +1,5 @@
 {
   "api_key": "add-token",
   "port": "8080",
-  "password_hash": "ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1",
   "token_hashes": []
 }

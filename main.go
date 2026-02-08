@@ -31,12 +31,12 @@ type Task struct {
 
 // Config holds application configuration
 type Config struct {
-	APIKey       string   `json:"api_key"`
-	Port         string   `json:"port"`
-	PasswordHash string   `json:"password_hash"`
-	TokenHashes  []string `json:"token_hashes"`
+	APIKey      string   `json:"api_key"`
+	Port        string   `json:"port"`
+	TokenHashes []string `json:"token_hashes"`
 }
 
+// LoadConfig reads configuration from config.json or environment variables
 // LoadConfig reads configuration from config.json or environment variables
 func LoadConfig() (*Config, error) {
 	config := &Config{
@@ -61,16 +61,6 @@ func LoadConfig() (*Config, error) {
 
 	if apiKey := os.Getenv("TASKMATE_API_KEY"); apiKey != "" {
 		config.APIKey = apiKey
-	}
-
-	if passwordHash := os.Getenv("TASKMATE_PASSWORD_HASH"); passwordHash != "" {
-		config.PasswordHash = passwordHash
-	}
-
-	// If no password hash is set, use default (randomforest)
-	if config.PasswordHash == "" {
-		config.PasswordHash = "ea424017c57b0d0b2f262edd821dca2dc3cfcbb47e296a9007415af86bbc6ac1"
-		log.Println("Warning: Using default password hash. Set TASKMATE_PASSWORD_HASH environment variable for production.")
 	}
 
 	// Initialize token_hashes if nil
