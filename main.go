@@ -451,6 +451,48 @@ func (s *Server) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	// Parse command line flags
+	helpFlag := false
+	versionFlag := false
+	for _, arg := range os.Args[1:] {
+		if arg == "-h" || arg == "--help" {
+			helpFlag = true
+		}
+		if arg == "-v" || arg == "--version" {
+			versionFlag = true
+		}
+	}
+
+	if helpFlag {
+		fmt.Println("TaskMate - Simple Task Management API")
+		fmt.Println("\nUsage:")
+		fmt.Println("  taskmate [options]")
+		fmt.Println("\nOptions:")
+		fmt.Println("  -h, --help     Show this help message")
+		fmt.Println("  -v, --version  Show version information")
+		fmt.Println("\nEnvironment Variables:")
+		fmt.Println("  TASKMATE_PORT     Server port (default: 8080)")
+		fmt.Println("  TASKMATE_API_KEY  Legacy API key (optional)")
+		fmt.Println("\nConfiguration:")
+		fmt.Println("  Config file: config.json")
+		fmt.Println("  Data file:   tasks.json")
+		fmt.Println("\nEndpoints:")
+		fmt.Println("  POST   /api/v1/auth/token     - Generate token (no auth required)")
+		fmt.Println("  GET    /api/v1/tasks          - List all tasks (no auth)")
+		fmt.Println("  GET    /api/v1/tasks/pending  - List pending tasks (no auth)")
+		fmt.Println("  GET    /api/v1/tasks/{id}     - Get task (no auth)")
+		fmt.Println("  POST   /api/v1/tasks          - Create task (requires token)")
+		fmt.Println("  PUT    /api/v1/tasks/{id}     - Update task (requires token)")
+		fmt.Println("  DELETE /api/v1/tasks/{id}     - Delete task (requires token)")
+		os.Exit(0)
+	}
+
+	if versionFlag {
+		fmt.Println("TaskMate v1.0.0")
+		fmt.Println("Educational task management API")
+		os.Exit(0)
+	}
+
 	// Load configuration
 	config, err := LoadConfig()
 	if err != nil {
